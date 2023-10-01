@@ -1,6 +1,7 @@
 import re, json
 from django import forms
 from .models import Post
+from django.core.cache import cache
 from django.db import IntegrityError
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
@@ -34,10 +35,19 @@ def create(request):
 
 # Post Analysis (GET /api/v1/posts/{id}/analysis/): Provide an analysis endpoint that returns the number of words and average word length in a post.
 def analysis(request, post_id):
+    cache_key = f'post_analysis_{post_id}'
+    cached_result = cache.get(cache_key)
+
+    if cached_result is not None:
+        return cached_result
+    
     post = get_object_or_404(Post, id=post_id)
 
     words = re.findall(r'\w+', post.content)
     word_count = len(words)
     avg_word_length = sum(len(word) for word in words) / word_count if word_count > 0 else 0
+    analysis_result = {'content': post.content, 'word_count': word_count, 'avg_word_length': avg_word_length}
+
+    cache.set(cache_key, render(request, 'posts/analysis.html', analysis_result), 3600)
     
-    return render(request, 'posts/analysis.html', {'content': post.content, 'word_count': word_count, 'avg_word_length': avg_word_length})
+    return render(request, 'posts/analysis.html', analysis_result)
